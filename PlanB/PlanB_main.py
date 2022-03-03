@@ -27,7 +27,9 @@ from stable_baselines.common.policies import MlpPolicy
 
 def Calc_num_objects(env_obs):
     len_obs = env_obs.shape[0]
+    # print("length of obs: ", len_obs)
     num_of_objects = int(len_obs/28) - 1
+    # print("num of objects: ", num_of_objects)
     return num_of_objects
 
 def Convert_input_shape(stack_obs, timesteps, num_of_objects):
@@ -42,9 +44,10 @@ def Convert_input_shape(stack_obs, timesteps, num_of_objects):
             # get T, R1, R2, R3 which is same for all objects
             desired_input_obs[t, k, :28] = stack_obs[t, :28]
             # Get features for each object
-            obj_index_lower = k * 28
+            obj_index_lower = 28 + (k * 28)
             obj_index_upper = obj_index_lower + 28
             if obj_index_upper >= lens_obs:
+                # print("convert input shape obj_index_lower: ", obj_index_lower)
                 desired_input_obs[t, k, 28:] = stack_obs[t, obj_index_lower:]
             else:
                 desired_input_obs[t, k, 28:] = stack_obs[t, obj_index_lower:obj_index_upper]
@@ -69,7 +72,7 @@ def main():
     obs = env.reset()
     num_of_objects = Calc_num_objects(obs)
     stack_input_obs = np.empty(28 + (num_of_objects * 28))
-    num_timesteps = 2
+    num_timesteps = 3
 
     # Obtain sequence of observations to train CF model
     for i in range(num_timesteps):
@@ -83,6 +86,7 @@ def main():
     # Get observations ab for CF model
     desired_input_obs = Convert_input_shape(stack_input_obs, num_timesteps, num_of_objects)
     tensor_input_obs_ab = torch.from_numpy(desired_input_obs)
+    # print("tensor input obs ab: ", tensor_input_obs_ab.shape)
 
     # Get observations c for CF model
     goal_intervention_dict = env.sample_new_goal()
@@ -91,11 +95,11 @@ def main():
     intervene_obs_c = np.expand_dims(intervene_obs_c, axis=0)
     desired_input_obs = Convert_input_shape(intervene_obs_c, 1, num_of_objects)
     tensor_input_obs_c = torch.from_numpy(desired_input_obs)
-    #print("tensor input obs: ", tensor_input_obs_c.shape)
+    # print("tensor input obs c: ", tensor_input_obs_c.shape)
 
     # Send to CF model
     CF_model = CoPhyNet(num_objects=num_of_objects)
-    CF_model_output = CF_model.forward(tensor_input_obs_ab, tensor_input_obs_c)
+    CF_model_out, CF_model_stab = CF_model.forward(tensor_input_obs_ab, tensor_input_obs_c)
 
 if __name__ == "__main__":
     main()
