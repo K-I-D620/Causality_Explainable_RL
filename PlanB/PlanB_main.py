@@ -54,8 +54,10 @@ def Convert_input_shape(stack_obs, timesteps, num_of_objects):
 
     return desired_input_obs
 
-# def Calc_loss(pred_pose_d, actual_pose_d):
-#     mse_pose_3d = torch.sum(((pred_pose_d - gt_pose_d) ** 2).mean(-1) * binary) / torch.sum(binary)  # (B,K)
+def Calc_loss(pred_obs_d, actual_obs_d):
+    total_num_features = pred_obs_d.shape[1] * pred_obs_d.shape[2] * pred_obs_d.shape[3]
+    mse_3d = torch.sum(((pred_obs_d - actual_obs_d) ** 2).mean(-1)) / total_num_features  # (B,K)
+    return mse_3d
 
 def main():
     # init gpu for training
@@ -102,6 +104,29 @@ def main():
     # Send to CF model
     CF_model = CoPhyNet(num_objects=num_of_objects)
     CF_model_out, CF_model_stab = CF_model.forward(tensor_input_obs_ab, tensor_input_obs_c)
+
+    # Testing the Calc_loss function
+    stack_obs_cd = np.empty(28 + (num_of_objects * 28))
+    # print("env sample action: ", env.action_space.sample()) # To check true shape of action
+    action = np.squeeze(RL_model.predict(intervene_obs_c, deterministic=True)[0])
+    # print("agent action: ", action)
+    for i in range(num_timesteps-1):
+        next_obs, _, _, _ = env.step(action)
+        action = np.squeeze(RL_model.predict(next_obs, deterministic=True)[0])
+        # print("agent action: ", action)
+        if i == 0:
+            stack_obs_cd = np.expand_dims(next_obs, axis=0)
+        elif i > 0:
+            stack_obs_cd = np.concatenate((stack_obs_cd, np.expand_dims(next_obs, axis=0)), axis=0)
+    # print("stack obs cd shape: ", stack_obs_cd.shape)
+    desired_input_obs = Convert_input_shape(stack_obs_cd, num_timesteps-1, num_of_objects)
+    tensor_actual_obs_d = torch.from_numpy(desired_input_obs)
+    # print("tensor actual obs d: ", tensor_actual_obs_d.shape)
+    actual_obs_d = tensor_actual_obs_d.unsqueeze(0)
+    # print("actual obs d: ", actual_obs_d.shape)
+    mse_3d = Calc_loss(CF_model_out, actual_obs_d)
+    print("mse loss: ", mse_3d)
+        
 
 if __name__ == "__main__":
     main()
