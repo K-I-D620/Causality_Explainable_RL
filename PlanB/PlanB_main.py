@@ -54,6 +54,8 @@ def Convert_input_shape(stack_obs, timesteps, num_of_objects):
 
     return desired_input_obs
 
+# def Calc_loss(pred_pose_d, actual_pose_d):
+#     mse_pose_3d = torch.sum(((pred_pose_d - gt_pose_d) ** 2).mean(-1) * binary) / torch.sum(binary)  # (B,K)
 
 def main():
     # init gpu for training

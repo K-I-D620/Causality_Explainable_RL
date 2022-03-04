@@ -78,15 +78,16 @@ class CoPhyNet(nn.Module):
       # print("gcn_on_AB: x_2 shape ", x_2.shape)
       x_12 = torch.cat([x_1, x_2], -1).float() # (1, n+m, n+m, 2*(56))
       E = self.mlp_inter(x_12) # E (1, n+m, n+m, H)
+      E = torch.mean(E, 1) # (1,n+m,H) Used in place of aggreg_E to reduce dimension
       # print("gcn_on_AB: E shape ", E.shape)
 
       # next position : o_t+1^1 = f(o_t^1,e_t+1)
-      out = self.mlp_out(torch.cat([x_1, E], -1).float()) # cat([x_next_pos, E], -1) = (1, n+m, n+m, 56 + H)
-      # print("gcn_on_AB next pos out shape: ", out.shape) # out (1, n+m, n+m, H)
-      list_out.append(out) # list_out prob added a dim at 0 or 1
+      x_next_pos = x.unsqueeze(0)
+      out = self.mlp_out(torch.cat([x_next_pos, E], -1).float()) # cat([x_next_pos, E], -1) = (1, n+m, 56 + H)
+      # print("gcn_on_AB next pos out shape: ", out.shape) # out (1, n+m, H)
+      list_out.append(out) # list_out prob added a dim at 0
 
-    out = torch.stack(list_out, 1) # (1,B,T,K,H) in our case B could change
-    out = out.squeeze(0)
+    out = torch.stack(list_out, 1) # (B,T,K,H) in our case B could change
 
     return out
 
@@ -211,20 +212,20 @@ class CoPhyNet(nn.Module):
 
     # Run a GCN on AB
     seq_o = self.gcn_on_AB(struct_obs_ab) # (B, T, n+m, H)
-    #print("forward gcn on ab seq_o shape: ", seq_o.shape)
+    print("forward gcn on ab seq_o shape: ", seq_o.shape)
 
     # Run a RNN on the outputs of GCN
     confounders = self.rnn_on_AB_up(seq_o) # (B,K,H)
-    #print("forward rnn on gcn confounders shape: ", confounders.shape)
+    print("forward rnn on gcn confounders shape: ", confounders.shape)
 
     # Breadth of NN
     B = confounders.shape[0]
-    #print("forward B: ", B)
+    print("forward B: ", B)
     # pred
     out, stability = self.pred_D(confounders, struct_obs_c, B, T=T)
-    #print("forward out shape: ", out.shape)
+    print("forward out shape: ", out.shape)
     # stability = (B,T-1,K,1)
     stability = stability.squeeze(-1)
-    #print("forward stability shape: ", stability.shape)
+    print("forward stability shape: ", stability.shape)
 
     return out, stability
