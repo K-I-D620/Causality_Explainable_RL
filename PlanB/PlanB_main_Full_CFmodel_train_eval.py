@@ -76,60 +76,95 @@ def main():
     # Init and calc some values
     obs = env.reset()
     num_of_objects = Calc_num_objects(obs)
-    stack_input_obs = np.empty(28 + (num_of_objects * 28))
     num_timesteps = 3
+    max_iter = 5
+    CF_model = CoPhyNet(num_objects=num_of_objects).to(device)
 
-    # Obtain sequence of observations to train CF model
-    action = pretrained_RL_agent.act(obs)
-    # print("agent action: ", action)
-    for i in range(num_timesteps):
-        next_obs, _, _, _ = env.step(action)
-        action = pretrained_RL_agent.act(next_obs)
-        if i == 0:
-            stack_input_obs = np.expand_dims(next_obs, axis=0)
-        elif i > 0:
-            stack_input_obs = np.concatenate((stack_input_obs, np.expand_dims(next_obs, axis=0)), axis=0)
-    # print("stack input obs: ", stack_input_obs)
+    # Pre-training of CF model with pretrained RL agent
+    optimizer = optim.Adam(CF_model.parameters(), lr=1e-3)
+    print_freq = 2
+    log_file_train = "./log_dir/log_train.txt"
+    list_mse_3d = []
 
-    # Get observations ab for CF model
-    desired_input_obs = Convert_input_shape(stack_input_obs, num_timesteps, num_of_objects)
-    tensor_input_obs_ab = torch.from_numpy(desired_input_obs)
-    # print("tensor input obs ab: ", tensor_input_obs_ab.shape)
+    CF_model.train()
+    for curr_iter in range(max_iter):
+        start_iter_time = time.time()
+        stack_input_obs = np.empty(28 + (num_of_objects * 28))
 
-    # Get observations c for CF model
-    goal_intervention_dict = env.sample_new_goal()
-    success_signal, intervene_obs_c = env.do_intervention(goal_intervention_dict)
-    print("Goal Intervention success signal", success_signal)
-    action = pretrained_RL_agent.act(intervene_obs_c)
-    intervene_obs_c = np.expand_dims(intervene_obs_c, axis=0)
-    desired_input_obs = Convert_input_shape(intervene_obs_c, 1, num_of_objects)
-    tensor_input_obs_c = torch.from_numpy(desired_input_obs)
-    # print("tensor input obs c: ", tensor_input_obs_c.shape)
-
-    # Send to CF model
-    CF_model = CoPhyNet(num_objects=num_of_objects)
-    CF_model_out, CF_model_stab = CF_model.forward(tensor_input_obs_ab, tensor_input_obs_c)
-
-    # Testing the Calc_loss function
-    stack_obs_cd = np.empty(28 + (num_of_objects * 28))
-    # print("env sample action: ", env.action_space.sample()) # To check true shape of action
-    # print("agent action: ", action)
-    for i in range(num_timesteps-1):
-        next_obs, _, _, _ = env.step(action)
-        action = pretrained_RL_agent.act(next_obs)
+        # Obtain sequence of observations to train CF model
+        action = pretrained_RL_agent.act(obs)
         # print("agent action: ", action)
-        if i == 0:
-            stack_obs_cd = np.expand_dims(next_obs, axis=0)
-        elif i > 0:
-            stack_obs_cd = np.concatenate((stack_obs_cd, np.expand_dims(next_obs, axis=0)), axis=0)
-    # print("stack obs cd shape: ", stack_obs_cd.shape)
-    desired_input_obs = Convert_input_shape(stack_obs_cd, num_timesteps-1, num_of_objects)
-    tensor_actual_obs_d = torch.from_numpy(desired_input_obs)
-    # print("tensor actual obs d: ", tensor_actual_obs_d.shape)
-    actual_obs_d = tensor_actual_obs_d.unsqueeze(0)
-    # print("actual obs d: ", actual_obs_d.shape)
-    mse_3d = Calc_loss(CF_model_out, actual_obs_d)
-    print("mse loss: ", mse_3d)
+        for i in range(num_timesteps):
+            next_obs, _, _, _ = env.step(action)
+            action = pretrained_RL_agent.act(next_obs)
+            if i == 0:
+                stack_input_obs = np.expand_dims(next_obs, axis=0)
+            elif i > 0:
+                stack_input_obs = np.concatenate((stack_input_obs, np.expand_dims(next_obs, axis=0)), axis=0)
+        # print("stack input obs: ", stack_input_obs)
+
+        # Get observations ab for CF model
+        desired_input_obs = Convert_input_shape(stack_input_obs, num_timesteps, num_of_objects)
+        tensor_input_obs_ab = torch.from_numpy(desired_input_obs).to(device)
+        # print("tensor input obs ab: ", tensor_input_obs_ab.shape)
+
+        # Get observations c for CF model
+        goal_intervention_dict = env.sample_new_goal()
+        success_signal, intervene_obs_c = env.do_intervention(goal_intervention_dict)
+        print("Goal Intervention for obs c success signal", success_signal)
+        action = pretrained_RL_agent.act(intervene_obs_c)
+        intervene_obs_c = np.expand_dims(intervene_obs_c, axis=0)
+        desired_input_obs = Convert_input_shape(intervene_obs_c, 1, num_of_objects)
+        tensor_input_obs_c = torch.from_numpy(desired_input_obs).to(device)
+        # print("tensor input obs c: ", tensor_input_obs_c.shape)
+
+        # Send to CF model
+        CF_model_out, CF_model_stab = CF_model.forward(tensor_input_obs_ab, tensor_input_obs_c)
+
+        # Testing the Calc_loss function
+        stack_obs_cd = np.empty(28 + (num_of_objects * 28))
+        # print("env sample action: ", env.action_space.sample()) # To check true shape of action
+        # print("agent action: ", action)
+        for i in range(num_timesteps-1):
+            next_obs, _, _, _ = env.step(action)
+            action = pretrained_RL_agent.act(next_obs)
+            # print("agent action: ", action)
+            if i == 0:
+                stack_obs_cd = np.expand_dims(next_obs, axis=0)
+            elif i > 0:
+                stack_obs_cd = np.concatenate((stack_obs_cd, np.expand_dims(next_obs, axis=0)), axis=0)
+        # print("stack obs cd shape: ", stack_obs_cd.shape)
+        desired_input_obs = Convert_input_shape(stack_obs_cd, num_timesteps-1, num_of_objects)
+        tensor_actual_obs_d = torch.from_numpy(desired_input_obs)
+        # print("tensor actual obs d: ", tensor_actual_obs_d.shape)
+        actual_obs_d = tensor_actual_obs_d.unsqueeze(0).to(device)
+        # print("actual obs d: ", actual_obs_d.shape)
+
+        # loss
+        mse_3d = Calc_loss(CF_model_out, actual_obs_d)
+
+        # backprop
+        optimizer.zero_grad()
+        mse_3d.backward()
+        optimizer.step()
+
+        goal_intervention_dict = env.sample_new_goal()
+        success_signal, obs = env.do_intervention(goal_intervention_dict)
+        print("Goal Intervention success signal", success_signal)
+
+        end_iter_time = time.time()
+        iter_time = end_iter_time - start_iter_time
+
+        print("Current iter: ", curr_iter)
+        print("Max iter: ", max_iter)
+        print(f"time for this iter: {iter_time:.3f}")
+        if curr_iter % print_freq == 0:
+            print(f"curr iter mse loss: {mse_3d:.6f}")
+            list_mse_3d.append(mse_3d.item())
+            print(f"Mean of mse_3d over {print_freq} iters: {np.mean(list_mse_3d):.6f}")
+
+    with open(log_file_train, "+a") as f:
+        f.write(f"Mean of mse_3d over 1 epoch: {np.mean(list_mse_3d):.6f}")
         
 
 if __name__ == "__main__":
