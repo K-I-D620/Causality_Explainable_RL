@@ -22,6 +22,7 @@ import time
 from causal_world.task_generators import generate_task
 from causal_world.envs.causalworld import CausalWorld
 from causal_world.actors.pushing_policy import PushingActorPolicy
+from causal_world.actors.stacking2_policy import Stacking2ActorPolicy
 from stable_baselines import PPO2
 import tensorflow as tf
 from stable_baselines.common.policies import MlpPolicy
@@ -44,14 +45,19 @@ def Convert_input_shape(stack_obs, timesteps, num_of_objects):
         for k in range(num_of_objects):
             # get T, R1, R2, R3 which is same for all objects
             desired_input_obs[t, k, :28] = stack_obs[t, :28]
-            # Get features for each object
-            obj_index_lower = 28 + (k * 28)
-            obj_index_upper = obj_index_lower + 28
-            if obj_index_upper >= lens_obs:
-                # print("convert input shape obj_index_lower: ", obj_index_lower)
-                desired_input_obs[t, k, 28:] = stack_obs[t, obj_index_lower:]
+            # Get features for each object 17 dim
+            obj_index_lower = 28 + (k * 17)
+            obj_index_upper = obj_index_lower + 17
+            desired_input_obs[t, k, 28:45] = stack_obs[t, obj_index_lower:obj_index_upper]
+            # Get partial goal feature of each object 11 dim, concat after the object features
+            part_goal_ind_low = (28 + (num_of_objects*17)) + (k*11)
+            part_goal_ind_up = part_goal_ind_low + 11
+            if part_goal_ind_up >= lens_obs:
+                # print("convert input shape part_goal_ind_low: ", part_goal_ind_low)
+                desired_input_obs[t, k, 45:] = stack_obs[t, part_goal_ind_low:]
             else:
-                desired_input_obs[t, k, 28:] = stack_obs[t, obj_index_lower:obj_index_upper]
+                desired_input_obs[t, k, 45:] = stack_obs[t, part_goal_ind_low:part_goal_ind_up]
+
 
     return desired_input_obs
 
