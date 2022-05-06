@@ -212,20 +212,20 @@ class CoPhyNet(nn.Module):
 
     # Run a GCN on AB
     seq_o = self.gcn_on_AB(struct_obs_ab) # (B, T, n+m, H)
-    print("forward gcn on ab seq_o shape: ", seq_o.shape)
+    #print("forward gcn on ab seq_o shape: ", seq_o.shape)
 
     # Run a RNN on the outputs of GCN
     confounders = self.rnn_on_AB_up(seq_o) # (B,K,H)
-    print("forward rnn on gcn confounders shape: ", confounders.shape)
+    #print("forward rnn on gcn confounders shape: ", confounders.shape)
 
     # Breadth of NN
     B = confounders.shape[0]
-    print("forward B: ", B)
+    #print("forward B: ", B)
     # pred
     out, stability = self.pred_D(confounders, struct_obs_c, B, T=T)
-    print("forward out shape: ", out.shape)
+    #print("forward out shape: ", out.shape)
     # stability = (B,T-1,K,1)
     stability = stability.squeeze(-1)
-    print("forward stability shape: ", stability.shape)
+    #print("forward stability shape: ", stability.shape)
 
-    return out, stability
+    return out, stability, confounders
